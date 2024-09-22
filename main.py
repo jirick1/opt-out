@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -6,30 +7,25 @@ import time
 
 def generate_4_digit_numbers():
     """Generate all 4-digit numbers from 0000 to 9999"""
-    numbers = [f"{i:04}" for i in range(10000)]
+    numbers = [f"{i:04}" for i in range(20)]
     return numbers
 
 
-def append_numbers_to_phone(phone_number, numbers):
+def append_numbers_to_phone(phone_number: str, numbers: list[str]):
     """Create a list of phone numbers by appending each
     4-digit number to the original phone number."""
     phone_number_list = [phone_number + number for number in numbers]
     return phone_number_list
 
 
-def send_stop_message(phone_number):
+def send_stop_message(phone_number: str):
     """Calls the osascript to send the "STOP" message"""
     script_path = os.path.join(os.path.dirname(__file__), "sendMessage.scpt")
     message = "STOP"
     os.system(f'osascript {script_path} {phone_number} "{message}"')
 
 
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: python script.py <phone_number>")
-        sys.exit(1)
-
-    phone_number = sys.argv[1]
+def unsubscribe_by_phone_number(phone_number: str):
     four_digit_numbers = generate_4_digit_numbers()
     phone_number_list = append_numbers_to_phone(phone_number, four_digit_numbers)
 
@@ -38,37 +34,77 @@ def main():
         time.sleep(0.3)  # Add a 300ms delay to prevent spamming
 
 
-def get_last_message_from_phone(phone_number):
-    # Path to the chat database
-    chat_db_path = os.path.expanduser("~/Library/Messages/chat.db")
-
-    # Connect to the SQLite database
-    conn = sqlite3.connect(chat_db_path)
-    cursor = conn.cursor()
-
-    # Query to get the last message from the specified phone number
-    query = """
-      SELECT text FROM message
-      JOIN handle ON message.handle_id = handle.ROWID
-      WHERE handle.id = ?
-      ORDER BY message.date DESC
-      LIMIT 1;
-    """
-
-    # Execute the query with the provided phone number
-    cursor.execute(query, (phone_number,))
-    last_message = cursor.fetchone()
-
-    # Close the database connection
-    conn.close()
-
-    # Return the last message if found, otherwise return None
-    if last_message:
-        return last_message[0]
+def main():
+    if len(sys.argv) == 2:
+        phone_number = sys.argv[1]
+        unsubscribe_by_phone_number(phone_number)
     else:
-        return None
+        print("Unscribing by chat.db")
+        spam_messages = get_spam_messages()
+        modified_phone_numbers = extract_phone_number_and_modify(spam_messages)
+        for phone_number in modified_phone_numbers:
+            send_stop_message(phone_number)
+            time.sleep(0.3)  # Add a 300ms delay to prevent spamming
+
+
+def get_spam_messages():
+    """Get all spam messages."""
+    chat_db_path = os.path.expanduser("~/Library/Messages/chat.db")
+    conn = None
+    cursor = None
+
+    try:
+        # Connect to the SQLite database
+        conn = sqlite3.connect(chat_db_path)
+        cursor = conn.cursor()
+
+        # SQL query to get the last 100 messages containing "spam: <number>"
+        query = """
+        SELECT message.text 
+        FROM message
+        WHERE message.text LIKE '%spam: %'
+        ORDER BY message.date DESC
+        LIMIT 100;
+        """
+
+        cursor.execute(query)
+        messages = cursor.fetchall()
+
+    except sqlite3.Error as e:
+        print(f"SQLite error occurred: {e}")
+        messages = []
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+    return messages
+
+
+def extract_phone_number_and_modify(messages):
+    phone_numbers = []
+    for message in messages:
+        text = message[0]
+
+        # Split the text by 'spam: ' and extract the phone number
+        if "spam: " in text:
+            try:
+                phone_number = text.split("spam: ")[1]
+
+                # Strip any surrounding whitespace or non-numeric characters
+                phone_number = re.sub(r"\D", "", phone_number)
+
+                # Remove the last four digits of the phone number
+                modified_phone_number = phone_number[:-4]
+
+                phone_numbers.append(modified_phone_number)
+            except IndexError:
+                continue
+    return phone_numbers
 
 
 if __name__ == "__main__":
     # main()
-    get_last_message_from_phone("17188772233")
+    pass
