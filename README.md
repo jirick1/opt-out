@@ -4,14 +4,13 @@ This Python script automates the process of unsubscribing from spam messages by 
 
 ## Table of Contents
 
-- Requirements
-- Setup
-- Usage
-  - Available Commands
-    - unsubscribe
-    - purge
-    - cleanup
-- Example Commands
+- [Requirements](#Requirements)
+- [Setup](#setup)
+- [Usage](#usage)
+  - [Available Commands](#available-commands)
+    - [unsubscribe](#unsubscribe)
+    - [purge](#purge)
+    - [cleanup](#cleanup)
 
 # Requirements
 
