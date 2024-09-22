@@ -3,9 +3,12 @@ import re
 import sqlite3
 import sys
 import time
+import argparse
 
 CHAT_DATABASE_PATH = "~/Library/Messages/chat.db"
 OPT_OUT_FILE_PATH = ".opted_out_list.txt"
+SEND_MESSAGE_SCPT = "sendMessage.scpt"
+DELETE_MESSAGE_SCRPT = "deleteMessage.scrpt"
 
 
 def load_opted_out_list():
@@ -41,55 +44,23 @@ def append_numbers_to_phone(phone_number: str, numbers: list[str]):
 
 def send_stop_message(phone_number: str):
     """Calls the osascript to send the "STOP" message"""
-    script_path = os.path.join(os.path.dirname(__file__), "sendMessage.scpt")
+    script_path = os.path.join(os.path.dirname(__file__), SEND_MESSAGE_SCPT)
     message = "STOP"
     os.system(f'osascript {script_path} {phone_number} "{message}"')
 
 
 def unsubscribe_by_phone_number(phone_number: str, opted_out_numbers: set):
     """Unsubscribe the phone number if not already opted out"""
+    print(f"Purging by number: {phone_number}")
     four_digit_numbers = generate_4_digit_numbers()
     phone_number_list = append_numbers_to_phone(phone_number, four_digit_numbers)
 
     for phone_number_with_digits in phone_number_list:
         if phone_number_with_digits not in opted_out_numbers:
+            print(f"Sending STOP to {phone_number_with_digits}")
             send_stop_message(phone_number_with_digits)
             opted_out_numbers.add(phone_number_with_digits)  # Add to opted-out list
-            time.sleep(0.3)  # Add a 300ms delay to prevent spamming
-
-
-def main():
-    opted_out_numbers = load_opted_out_list()
-
-    if len(sys.argv) == 2:
-        phone_number = sys.argv[1]
-        unsubscribe_by_phone_number(phone_number, opted_out_numbers)
-    else:
-        print("Unsubscribing by chat.db")
-        spam_messages = get_spam_messages()
-        modified_phone_numbers = extract_phone_number_and_modify(spam_messages)
-
-        # Generate all 4-digit numbers
-        four_digit_numbers = generate_4_digit_numbers()
-
-        # Create a new list by appending each 4-digit \
-        # number to each modified phone number
-        phone_number_list = [
-            phone + digits
-            for phone in modified_phone_numbers
-            for digits in four_digit_numbers
-        ]
-
-        # Loop through the new list of phone numbers and send the STOP message
-        for phone_number in phone_number_list:
-            if phone_number not in opted_out_numbers:
-                print(f"Sending STOP to {phone_number}")
-                send_stop_message(phone_number)
-                opted_out_numbers.add(phone_number)  # Add to opted-out list
-                time.sleep(0.1)  # Add a 300ms delay to prevent spamming
-
-    # Save the opted-out numbers after the operation
-    save_opted_out_list(opted_out_numbers)
+            time.sleep(0.1)  # Add a 100ms delay to prevent spamming
 
 
 def get_spam_messages():
@@ -142,6 +113,92 @@ def extract_phone_number_and_modify(messages):
             except IndexError:
                 continue
     return phone_numbers
+
+
+def internal_unsubscribe(opted_out_numbers: list[str]):
+    """Unsubscribing by numbers db by spam: <number>."""
+    spam_messages = get_spam_messages()
+    modified_phone_numbers = extract_phone_number_and_modify(spam_messages)
+
+    four_digit_numbers = generate_4_digit_numbers()
+    phone_number_list = [
+        phone + digits
+        for phone in modified_phone_numbers
+        for digits in four_digit_numbers
+    ]
+
+    for phone_number in phone_number_list:
+        if phone_number not in opted_out_numbers:
+            print(f"Sending STOP to {phone_number}")
+            send_stop_message(phone_number)
+            opted_out_numbers.add(phone_number)
+            time.sleep(0.1)  # Add a 100ms delay to prevent spamming
+    print("unsubscribed Finished.")
+
+
+def internal_cleanup():
+    """Delete all messages from chat.db where message.text is exactly 'STOP'."""
+    chat_db_path = os.path.expanduser(CHAT_DATABASE_PATH)
+    conn = None
+    cursor = None
+
+    try:
+        conn = sqlite3.connect(chat_db_path)
+        cursor = conn.cursor()
+
+        query = """
+        DELETE FROM message
+        WHERE text = 'STOP';
+        """
+
+        cursor.execute(query)
+        conn.commit()  # Commit the changes to the database
+
+        print(f"Deleted {cursor.rowcount} messages with text exactly 'STOP'.")
+
+    except sqlite3.Error as e:
+        print(f"SQLite error occurred during internal cleanup: {e}")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Spam Message Unsubscriber Tool")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Option 1: unsubscribe by numbers db by spam: <number>
+    subparsers.add_parser(
+        "unsubscribe", help="Unsubscribe by numbers db by spam: <number>"
+    )
+
+    # Option 2: purge by number
+    parser_purge = subparsers.add_parser("purge", help="Purge by phone number")
+    parser_purge.add_argument("phone_number", help="Phone number to purge")
+
+    # Option 3: clean up database
+    subparsers.add_parser("cleanup", help="Clean up database (stubbed function)")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_usage()
+        sys.exit(1)
+
+    opted_out_numbers = load_opted_out_list()
+
+    if args.command == "unsubscribe":
+        internal_unsubscribe(opted_out_numbers)
+    elif args.command == "purge":
+        unsubscribe_by_phone_number(args.phone_number, opted_out_numbers)
+    elif args.command == "cleanup":
+        internal_cleanup()
+
+    # Save the opted-out numbers after the operation
+    save_opted_out_list(opted_out_numbers)
 
 
 if __name__ == "__main__":
