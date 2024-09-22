@@ -15,26 +15,26 @@ class OptedOutManager:
 
     def __init__(self, file_path):
         self.file_path = file_path
-        self.opted_out_numbers = self.load_opted_out_list()
+        self.opted_out_numbers = self.load_opted_out_numbers()
 
-    def load_opted_out_list(self):
+    def load_opted_out_numbers(self):
         """Load the list of phone numbers that have already been sent a STOP message."""
         if not os.path.exists(self.file_path):
             return set()
         with open(self.file_path, "r") as file:
             return set(line.strip() for line in file)
 
-    def save_opted_out_list(self):
+    def save_opted_out_numbers(self):
         """Save the list of phone numbers that have been opted out."""
         with open(self.file_path, "w") as file:
             for number in self.opted_out_numbers:
                 file.write(f"{number}\n")
 
-    def add_opted_out(self, phone_number):
+    def add_number(self, phone_number):
         """Add a phone number to the opted-out list."""
         self.opted_out_numbers.add(phone_number)
 
-    def is_opted_out(self, phone_number):
+    def is_number_opted_out(self, phone_number):
         """Check if a phone number is already in the opted-out list."""
         return phone_number in self.opted_out_numbers
 
@@ -43,15 +43,15 @@ class PhoneNumberProcessor:
     """Handles phone number generation and formatting."""
 
     @staticmethod
-    def generate_4_digit_numbers():
-        """Generate all 4-digit numbers from 0000 to 9999"""
+    def generate_four_digit_suffixes():
+        """Generate all 4-digit numbers from 0000 to 9999."""
         return [f"{i:04}" for i in range(10000)]
 
     @staticmethod
-    def append_numbers_to_phone(phone_number: str, numbers: list[str]):
-        """Create a list of phone numbers by appending each
-        4-digit number to the original phone number."""
-        return [phone_number + number for number in numbers]
+    def append_suffixes_to_phone_number(phone_number: str, suffixes: list[str]):
+        """Create a list of phone numbers by appending each suffix
+        to the original phone number."""
+        return [phone_number + suffix for suffix in suffixes]
 
 
 class MessageSender:
@@ -61,7 +61,7 @@ class MessageSender:
         self.script_path = script_path
 
     def send_stop_message(self, phone_number: str):
-        """Calls the osascript to send the "STOP" message."""
+        """Calls the osascript to send the 'STOP' message."""
         message = "STOP"
         os.system(f'osascript {self.script_path} {phone_number} "{message}"')
 
@@ -73,41 +73,27 @@ class DatabaseHandler:
         self.db_path = os.path.expanduser(db_path)
 
     def execute_query(self, query, params=None):
-        """Executes a query and returns the results."""
-        conn = None
-        cursor = None
+        """Execute a query and return the results."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(query, params or [])
-            return cursor.fetchall()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params or [])
+                return cursor.fetchall()
         except sqlite3.Error as e:
             print(f"SQLite error occurred: {e}")
             return []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
 
     def execute_delete(self, query, params=None):
-        """Executes a delete query and returns the number of affected rows."""
-        conn = None
-        cursor = None
+        """Execute a delete query and return the number of affected rows."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(query, params or [])
-            conn.commit()
-            return cursor.rowcount
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params or [])
+                conn.commit()
+                return cursor.rowcount
         except sqlite3.Error as e:
             print(f"SQLite error occurred: {e}")
             return 0
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
 
 
 class MessageProcessor:
@@ -124,7 +110,7 @@ class MessageProcessor:
         self.sender = sender
 
     def get_spam_messages(self):
-        """Get all spam messages."""
+        """Retrieve spam messages containing 'spam: <number>'."""
         query = """
         SELECT message.text 
         FROM message
@@ -134,7 +120,7 @@ class MessageProcessor:
         """
         return self.db_handler.execute_query(query)
 
-    def extract_phone_number_and_modify(self, messages):
+    def extract_phone_numbers_from_messages(self, messages):
         """Extract and format phone numbers from spam messages."""
         phone_numbers = []
         for message in messages:
@@ -149,25 +135,37 @@ class MessageProcessor:
                     continue
         return phone_numbers
 
-    def unsubscribe_by_spam_db(self, opted_out_manager: OptedOutManager):
-        """Unsubscribes by numbers found in spam messages."""
-        messages = self.get_spam_messages()
-        modified_phone_numbers = self.extract_phone_number_and_modify(messages)
-        four_digit_numbers = self.phone_processor.generate_4_digit_numbers()
+    def unsubscribe_numbers(
+        self, phone_numbers: list[str], opted_out_manager: OptedOutManager
+    ):
+        """Unsubscribe a list of phone numbers."""
+        four_digit_suffixes = self.phone_processor.generate_four_digit_suffixes()
 
-        for phone_number in modified_phone_numbers:
-            phone_number_list = self.phone_processor.append_numbers_to_phone(
-                phone_number, four_digit_numbers
+        for phone_number in phone_numbers:
+            full_phone_numbers = self.phone_processor.append_suffixes_to_phone_number(
+                phone_number, four_digit_suffixes
             )
-            for full_phone_number in phone_number_list:
-                if not opted_out_manager.is_opted_out(full_phone_number):
+            for full_phone_number in full_phone_numbers:
+                if not opted_out_manager.is_number_opted_out(full_phone_number):
                     print(f"Sending STOP to {full_phone_number}")
                     self.sender.send_stop_message(full_phone_number)
-                    opted_out_manager.add_opted_out(full_phone_number)
+                    opted_out_manager.add_number(full_phone_number)
                     time.sleep(0.1)  # Add a delay to prevent spamming
 
+    def unsubscribe_from_spam_messages(self, opted_out_manager: OptedOutManager):
+        """Unsubscribe numbers extracted from spam messages."""
+        messages = self.get_spam_messages()
+        phone_numbers = self.extract_phone_numbers_from_messages(messages)
+        self.unsubscribe_numbers(phone_numbers, opted_out_manager)
 
-def internal_cleanup(db_handler: DatabaseHandler):
+    def unsubscribe_specific_phone_number(
+        self, phone_number: str, opted_out_manager: OptedOutManager
+    ):
+        """Unsubscribe a specific phone number."""
+        self.unsubscribe_numbers([phone_number], opted_out_manager)
+
+
+def clean_up_database(db_handler: DatabaseHandler):
     """Delete all messages from chat.db where message.text is exactly 'STOP'."""
     query = """
     DELETE FROM message
@@ -181,17 +179,19 @@ def main():
     parser = argparse.ArgumentParser(description="Spam Message Unsubscriber Tool")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Option 1: unsubscribe by numbers db by spam: <number>
+    # Option 1: Unsubscribe by numbers found in spam messages
     subparsers.add_parser(
-        "unsubscribe", help="Unsubscribe by numbers db by spam: <number>"
+        "unsubscribe", help="Unsubscribe using numbers found in spam messages"
     )
 
-    # Option 2: purge by number
+    # Option 2: Purge by phone number
     parser_purge = subparsers.add_parser("purge", help="Purge by phone number")
     parser_purge.add_argument("phone_number", help="Phone number to purge")
 
-    # Option 3: clean up database
-    subparsers.add_parser("cleanup", help="Clean up database")
+    # Option 3: Clean up database
+    subparsers.add_parser(
+        "cleanup", help="Clean up database by removing 'STOP' messages"
+    )
 
     args = parser.parse_args()
 
@@ -206,13 +206,16 @@ def main():
     message_processor = MessageProcessor(db_handler, phone_processor, sender)
 
     if args.command == "unsubscribe":
-        message_processor.unsubscribe_by_spam_db(opted_out_manager)
+        message_processor.unsubscribe_from_spam_messages(opted_out_manager)
     elif args.command == "purge":
-        message_processor.unsubscribe_by_spam_db(opted_out_manager)
+        phone_number = args.phone_number
+        message_processor.unsubscribe_specific_phone_number(
+            phone_number, opted_out_manager
+        )
     elif args.command == "cleanup":
-        internal_cleanup(db_handler)
+        clean_up_database(db_handler)
 
-    opted_out_manager.save_opted_out_list()
+    opted_out_manager.save_opted_out_numbers()
 
 
 if __name__ == "__main__":
