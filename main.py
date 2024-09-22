@@ -25,9 +25,10 @@ class OptedOutManager:
             return set(line.strip() for line in file)
 
     def save_opted_out_numbers(self):
-        """Save the list of phone numbers that have been opted out."""
+        """Save the list of phone numbers that have been opted out,
+        sorted in ascending order."""
         with open(self.file_path, "w") as file:
-            for number in self.opted_out_numbers:
+            for number in sorted(self.opted_out_numbers, key=lambda x: int(x)):
                 file.write(f"{number}\n")
 
     def add_number(self, phone_number):
