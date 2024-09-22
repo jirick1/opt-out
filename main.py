@@ -86,7 +86,7 @@ def main():
                 print(f"Sending STOP to {phone_number}")
                 send_stop_message(phone_number)
                 opted_out_numbers.add(phone_number)  # Add to opted-out list
-                time.sleep(0.3)  # Add a 300ms delay to prevent spamming
+                time.sleep(0.1)  # Add a 300ms delay to prevent spamming
 
     # Save the opted-out numbers after the operation
     save_opted_out_list(opted_out_numbers)
