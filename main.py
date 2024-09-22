@@ -42,7 +42,21 @@ def main():
         print("Unscribing by chat.db")
         spam_messages = get_spam_messages()
         modified_phone_numbers = extract_phone_number_and_modify(spam_messages)
-        for phone_number in modified_phone_numbers:
+
+        # Generate all 4-digit numbers
+        four_digit_numbers = generate_4_digit_numbers()
+
+        # Create a new list by appending each 4-digit \
+        # number to each modified phone number
+        phone_number_list = [
+            phone + digits
+            for phone in modified_phone_numbers
+            for digits in four_digit_numbers
+        ]
+
+        # Loop through the new list of phone numbers and send the STOP message
+        for phone_number in phone_number_list:
+            print(phone_number)
             send_stop_message(phone_number)
             time.sleep(0.3)  # Add a 300ms delay to prevent spamming
 
@@ -88,17 +102,11 @@ def extract_phone_number_and_modify(messages):
     for message in messages:
         text = message[0]
 
-        # Split the text by 'spam: ' and extract the phone number
         if "spam: " in text:
             try:
                 phone_number = text.split("spam: ")[1]
-
-                # Strip any surrounding whitespace or non-numeric characters
                 phone_number = re.sub(r"\D", "", phone_number)
-
-                # Remove the last four digits of the phone number
                 modified_phone_number = phone_number[:-4]
-
                 phone_numbers.append(modified_phone_number)
             except IndexError:
                 continue
@@ -106,5 +114,7 @@ def extract_phone_number_and_modify(messages):
 
 
 if __name__ == "__main__":
-    # main()
-    pass
+    main()
+
+
+1202, 970, 0000
