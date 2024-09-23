@@ -6,8 +6,9 @@ import time
 import argparse
 
 CHAT_DATABASE_PATH = "~/Library/Messages/chat.db"
-OPT_OUT_FILE_PATH = ".opted_out_list.txt"
-SEND_MESSAGE_SCPT = "sendMessage.scpt"
+OPT_OUT_FILE_PATH = "spam_list/opted_out_list.txt"
+SPAM_NUMBERS_FILE = "spam_list/spam_numbers.txt"
+SEND_MESSAGE_SCPT = "apple_scripts/sendMessage.scpt"
 
 
 class OptedOutManager:
@@ -28,7 +29,7 @@ class OptedOutManager:
         """Save the list of phone numbers that have been opted out,
         sorted in ascending order."""
         with open(self.file_path, "w") as file:
-            for number in sorted(self.opted_out_numbers, key=lambda x: int(x)):
+            for number in sorted(self.opted_out_numbers):
                 file.write(f"{number}\n")
 
     def add_number(self, phone_number):
@@ -140,6 +141,7 @@ class MessageProcessor:
         self, phone_numbers: list[str], opted_out_manager: OptedOutManager
     ):
         """Unsubscribe a list of phone numbers."""
+        print(f"total number to unsubscribe from {len(phone_numbers)}")
         four_digit_suffixes = self.phone_processor.generate_four_digit_suffixes()
 
         for phone_number in phone_numbers:
@@ -164,6 +166,33 @@ class MessageProcessor:
     ):
         """Unsubscribe a specific phone number."""
         self.unsubscribe_numbers([phone_number], opted_out_manager)
+
+    def bulk_unsubscribe_from_file(
+        self, file_path: str, opted_out_manager: OptedOutManager
+    ):
+        """Unsubscribe numbers from a file."""
+
+        def load_spam_list_file(file_path: str):
+            """Load the list of phone numbers that have
+            already been sent a STOP message."""
+
+            if not os.path.exists(file_path):
+                print(
+                    f"File {file_path} does not exist. \
+                      \nLoading default {SPAM_NUMBERS_FILE} \n"
+                )
+            if not file_path or not os.path.exists(file_path):
+                file_path = SPAM_NUMBERS_FILE
+            with open(file_path, "r") as file:
+                return set([line.strip() for line in file if line.strip()])
+
+        phone_numbers = load_spam_list_file(file_path)
+        for phone_number in phone_numbers:
+            if not opted_out_manager.is_number_opted_out(phone_number):
+                print(f"Sending STOP to {phone_number}")
+                self.sender.send_stop_message(phone_number)
+                opted_out_manager.add_number(phone_number)
+                time.sleep(0.1)  # Add a delay to prevent spamming
 
 
 def clean_up_database(db_handler: DatabaseHandler):
@@ -194,6 +223,16 @@ def main():
         "cleanup", help="Clean up database by removing 'STOP' messages"
     )
 
+    # Option 4: Bulk unsubscribe from file
+    parser_bulk = subparsers.add_parser(
+        "bulk_unsubscribe", help="Bulk unsubscribe using numbers from spam_numbers.txt"
+    )
+    parser_bulk.add_argument(
+        "--file",
+        default=SPAM_NUMBERS_FILE,
+        help="Path to the spam numbers file (default: spam_numbers.txt)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -215,6 +254,8 @@ def main():
         )
     elif args.command == "cleanup":
         clean_up_database(db_handler)
+    elif args.command == "bulk_unsubscribe":
+        message_processor.bulk_unsubscribe_from_file(args.file, opted_out_manager)
 
     opted_out_manager.save_opted_out_numbers()
 
