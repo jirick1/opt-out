@@ -179,15 +179,14 @@ class MessageProcessor:
             if not os.path.exists(file_path):
                 print(
                     f"File {file_path} does not exist. \
-                      Loading default {SPAM_NUMBERS_FILE}"
+                      \nLoading default {SPAM_NUMBERS_FILE} \n"
                 )
-            if not file_path:
+            if not file_path or not os.path.exists(file_path):
                 file_path = SPAM_NUMBERS_FILE
             with open(file_path, "r") as file:
                 return set([line.strip() for line in file if line.strip()])
 
         phone_numbers = load_spam_list_file(file_path)
-        print(f"total number to unsubscribe from {len(phone_numbers)}")
         for phone_number in phone_numbers:
             if not opted_out_manager.is_number_opted_out(phone_number):
                 print(f"Sending STOP to {phone_number}")
