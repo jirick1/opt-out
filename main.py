@@ -7,6 +7,7 @@ import argparse
 
 CHAT_DATABASE_PATH = "~/Library/Messages/chat.db"
 OPT_OUT_FILE_PATH = ".opted_out_list.txt"
+SPAM_NUMBERS_FILE = "spam_numbers.txt"
 SEND_MESSAGE_SCPT = "sendMessage.scpt"
 
 
@@ -28,7 +29,7 @@ class OptedOutManager:
         """Save the list of phone numbers that have been opted out,
         sorted in ascending order."""
         with open(self.file_path, "w") as file:
-            for number in sorted(self.opted_out_numbers, key=lambda x: int(x)):
+            for number in sorted(self.opted_out_numbers):
                 file.write(f"{number}\n")
 
     def add_number(self, phone_number):
@@ -165,6 +166,17 @@ class MessageProcessor:
         """Unsubscribe a specific phone number."""
         self.unsubscribe_numbers([phone_number], opted_out_manager)
 
+    def bulk_unsubscribe_from_file(
+        self, file_path: str, opted_out_manager: OptedOutManager
+    ):
+        """Unsubscribe numbers from a file."""
+        if not os.path.exists(file_path):
+            print(f"File {file_path} does not exist.")
+            return
+        with open(file_path, "r") as file:
+            phone_numbers = [line.strip() for line in file if line.strip()]
+        self.unsubscribe_numbers(phone_numbers, opted_out_manager)
+
 
 def clean_up_database(db_handler: DatabaseHandler):
     """Delete all messages from chat.db where message.text is exactly 'STOP'."""
@@ -194,6 +206,16 @@ def main():
         "cleanup", help="Clean up database by removing 'STOP' messages"
     )
 
+    # Option 4: Bulk unsubscribe from file
+    parser_bulk = subparsers.add_parser(
+        "bulk_unsubscribe", help="Bulk unsubscribe using numbers from spam_numbers.txt"
+    )
+    parser_bulk.add_argument(
+        "--file",
+        default=SPAM_NUMBERS_FILE,
+        help="Path to the spam numbers file (default: spam_numbers.txt)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -215,6 +237,8 @@ def main():
         )
     elif args.command == "cleanup":
         clean_up_database(db_handler)
+    elif args.command == "bulk_unsubscribe":
+        message_processor.bulk_unsubscribe_from_file(args.file, opted_out_manager)
 
     opted_out_manager.save_opted_out_numbers()
 
