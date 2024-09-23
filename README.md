@@ -20,8 +20,6 @@ This Python script automates the process of unsubscribing from spam messages by 
 
 # Setup
 
-1. Clone or Download the Repository:
-
 ```
 # Terminal
 
