@@ -6,9 +6,9 @@ import time
 import argparse
 
 CHAT_DATABASE_PATH = "~/Library/Messages/chat.db"
-OPT_OUT_FILE_PATH = ".opted_out_list.txt"
-SPAM_NUMBERS_FILE = "spam_numbers.txt"
-SEND_MESSAGE_SCPT = "sendMessage.scpt"
+OPT_OUT_FILE_PATH = "spam_list/opted_out_list.txt"
+SPAM_NUMBERS_FILE = "spam_list/spam_numbers.txt"
+SEND_MESSAGE_SCPT = "apple_scripts/sendMessage.scpt"
 
 
 class OptedOutManager:
