@@ -125,3 +125,7 @@ Cleans up your Messages database by deleting all messages where the text is exac
 
 python main.py cleanup
 ```
+
+
+https://github.com/user-attachments/assets/62e966a5-5490-43e3-bb9b-d471af7a49f5
+
