@@ -141,6 +141,7 @@ class MessageProcessor:
         self, phone_numbers: list[str], opted_out_manager: OptedOutManager
     ):
         """Unsubscribe a list of phone numbers."""
+        print(f"total number to unsubscribe from {len(phone_numbers)}")
         four_digit_suffixes = self.phone_processor.generate_four_digit_suffixes()
 
         for phone_number in phone_numbers:
@@ -170,12 +171,29 @@ class MessageProcessor:
         self, file_path: str, opted_out_manager: OptedOutManager
     ):
         """Unsubscribe numbers from a file."""
-        if not os.path.exists(file_path):
-            print(f"File {file_path} does not exist.")
-            return
-        with open(file_path, "r") as file:
-            phone_numbers = [line.strip() for line in file if line.strip()]
-        self.unsubscribe_numbers(phone_numbers, opted_out_manager)
+
+        def load_spam_list_file(file_path: str):
+            """Load the list of phone numbers that have
+            already been sent a STOP message."""
+
+            if not os.path.exists(file_path):
+                print(
+                    f"File {file_path} does not exist. \
+                      Loading default {SPAM_NUMBERS_FILE}"
+                )
+            if not file_path:
+                file_path = SPAM_NUMBERS_FILE
+            with open(file_path, "r") as file:
+                return set([line.strip() for line in file if line.strip()])
+
+        phone_numbers = load_spam_list_file(file_path)
+        print(f"total number to unsubscribe from {len(phone_numbers)}")
+        for phone_number in phone_numbers:
+            if not opted_out_manager.is_number_opted_out(phone_number):
+                print(f"Sending STOP to {phone_number}")
+                self.sender.send_stop_message(phone_number)
+                opted_out_manager.add_number(phone_number)
+                time.sleep(0.1)  # Add a delay to prevent spamming
 
 
 def clean_up_database(db_handler: DatabaseHandler):
