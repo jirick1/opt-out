@@ -55,6 +55,14 @@ class PhoneNumberProcessor:
         to the original phone number."""
         return [phone_number + suffix for suffix in suffixes]
 
+    @staticmethod
+    def clean_phone_number(phone_number: str):
+        """Clean and format the phone number."""
+        phone_number = re.sub(r"\D", "", phone_number)  # Remove non-digit characters
+        if phone_number.startswith("1") and len(phone_number) == 11:
+            phone_number = phone_number[1:]  # Remove leading '1' if it's a country code
+        return phone_number
+
 
 class MessageSender:
     """Handles sending messages using osascript."""
@@ -96,6 +104,17 @@ class DatabaseHandler:
         except sqlite3.Error as e:
             print(f"SQLite error occurred: {e}")
             return 0
+
+    def get_last_messages_with_phone_numbers(self, limit=100):
+        """Retrieve the last N messages along with their associated phone numbers."""
+        query = """
+        SELECT message.text, handle.id AS phone_number
+        FROM message
+        JOIN handle ON message.handle_id = handle.ROWID
+        ORDER BY message.date DESC
+        LIMIT ?;
+        """
+        return self.execute_query(query, (limit,))
 
 
 class MessageProcessor:
@@ -141,7 +160,7 @@ class MessageProcessor:
         self, phone_numbers: list[str], opted_out_manager: OptedOutManager
     ):
         """Unsubscribe a list of phone numbers."""
-        print(f"total number to unsubscribe from {len(phone_numbers)}")
+        print(f"Total number to unsubscribe from: {len(phone_numbers)}")
         four_digit_suffixes = self.phone_processor.generate_four_digit_suffixes()
 
         for phone_number in phone_numbers:
@@ -194,6 +213,63 @@ class MessageProcessor:
                 opted_out_manager.add_number(phone_number)
                 time.sleep(0.1)  # Add a delay to prevent spamming
 
+    def unsubscribe_political_messages(self, opted_out_manager: OptedOutManager):
+        """Unsubscribe numbers from messages containing
+        'Text STOP to quit' and political buzz words."""
+        # Get the last 100 messages with phone numbers
+        messages = self.db_handler.get_last_messages_with_phone_numbers(limit=100)
+
+        # Target phrases
+        target_phrase = "Text STOP to quit"
+        buzz_words = ["Democrats", "congressman", "campaign"]
+
+        # Initialize the model
+        try:
+            from sentence_transformers import SentenceTransformer, util  # type: ignore
+        except ImportError:
+            print(
+                "sentence-transformers library not installed. Please \
+                  install it with 'pip install sentence-transformers'"
+            )
+            return
+
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+
+        # Compute embedding for the target phrase
+        target_embedding = model.encode(target_phrase, convert_to_tensor=True)
+
+        for message_text, phone_number in messages:
+            if not message_text or not phone_number:
+                continue  # Skip if any of the fields are None
+
+            # Clean the phone number
+            phone_number = self.phone_processor.clean_phone_number(phone_number)
+
+            # Compute embedding for the message
+            message_embedding = model.encode(message_text, convert_to_tensor=True)
+
+            # Compute similarity with the target phrase
+            sim_target = util.pytorch_cos_sim(message_embedding, target_embedding)
+
+            # Define threshold
+            target_threshold = 0.6  # Adjust as needed
+
+            if sim_target.item() >= target_threshold:
+                # Check if any buzz word is in the message text
+                if any(
+                    buzz_word.lower() in message_text.lower()
+                    for buzz_word in buzz_words
+                ):
+                    # This message matches the criteria
+                    if not opted_out_manager.is_number_opted_out(phone_number):
+                        print(
+                            f"Sending STOP to {phone_number} \
+                              for message: {message_text}"
+                        )
+                        self.sender.send_stop_message(phone_number)
+                        opted_out_manager.add_number(phone_number)
+                        time.sleep(0.1)  # Add a delay to prevent spamming
+
 
 def clean_up_database(db_handler: DatabaseHandler):
     """Delete all messages from chat.db where message.text is exactly 'STOP'."""
@@ -225,12 +301,20 @@ def main():
 
     # Option 4: Bulk unsubscribe from file
     parser_bulk = subparsers.add_parser(
-        "bulk_unsubscribe", help="Bulk unsubscribe using numbers from spam_numbers.txt"
+        "bulk_unsubscribe",
+        help="Bulk unsubscribe using numbers from spam_numbers.txt",
     )
     parser_bulk.add_argument(
         "--file",
         default=SPAM_NUMBERS_FILE,
         help="Path to the spam numbers file (default: spam_numbers.txt)",
+    )
+
+    # Option 5: Unsubscribe political messages
+    subparsers.add_parser(
+        "unsubscribe_political",
+        help="Unsubscribe numbers from messages containing \
+          'Text STOP to quit' and political buzz words",
     )
 
     args = parser.parse_args()
@@ -256,6 +340,8 @@ def main():
         clean_up_database(db_handler)
     elif args.command == "bulk_unsubscribe":
         message_processor.bulk_unsubscribe_from_file(args.file, opted_out_manager)
+    elif args.command == "unsubscribe_political":
+        message_processor.unsubscribe_political_messages(opted_out_manager)
 
     opted_out_manager.save_opted_out_numbers()
 
