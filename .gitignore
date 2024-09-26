@@ -39,3 +39,4 @@ terraform.rc
 # Ignore venv
 venv/*
 options/__pycache__/*.pyc
+__pycache__/shared.cpython-310.pyc
