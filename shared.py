@@ -107,10 +107,11 @@ class DatabaseHandler:
     def get_last_messages_with_phone_numbers(self, limit=100):
         """Retrieve the last N messages along with their associated phone numbers."""
         query = """
-        SELECT message.text, handle.id AS phone_number
-        FROM message
-        JOIN handle ON message.handle_id = handle.ROWID
-        ORDER BY message.date DESC
+        SELECT m.text, m.attributedBody, handle.id AS phone_number
+        FROM message m
+        JOIN handle ON m.handle_id = handle.ROWID
+        WHERE m.service = 'SMS'
+        ORDER BY m.date DESC
         LIMIT ?;
         """
         return self.execute_query(query, (limit,))
