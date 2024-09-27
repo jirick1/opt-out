@@ -45,7 +45,6 @@ def decode_nsattributedstring(blob_data):
         r"\bI N V\b",
         r"\bI P U\b",
         r"'\\\(\*\)Z\$classnameX\$classesW",  # Escaped special characters
-        # Add any other unwanted patterns here
     ]
     combined_pattern = "|".join(unwanted_patterns)
     cleaned_text = re.sub(combined_pattern, "", combined_text)
