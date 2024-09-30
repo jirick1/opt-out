@@ -25,6 +25,34 @@ make setup
 source . ./venv/bin/activate
 ```
 
+## Install Cron Job
+
+```
+make install
+```
+
+To create a cron job that runs the `unsubscribe_political` command every 3 hours, use the following command:
+
+This will:
+
+- Check if the virtual environment is set up.
+- Add a cron job that executes the `unsubscribe_political` command every 3 hours.
+- If the cron job is already installed, it will display `Already installed`.
+
+## Uninstall Cron Job
+
+```
+make uninstall
+```
+
+To remove the cron job, use the following command:
+
+This will:
+
+- Check if the virtual environment is set up.
+- Remove the existing cron job for the `unsubscribe_political` command.
+- If the cron job is not found, it will display `No cron job found for unsubscribe_political`.
+
 # Usage
 
 ```
@@ -49,3 +77,7 @@ options:
 ```
 
 https://github.com/user-attachments/assets/62e966a5-5490-43e3-bb9b-d471af7a49f5
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
