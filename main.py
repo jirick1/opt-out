@@ -11,6 +11,7 @@ from shared import (
     CHAT_DATABASE_PATH,
     OPT_OUT_FILE_PATH,
     SEND_MESSAGE_SCPT,
+    SPAM_NUMBERS_FILE,
     OptedOutManager,
     DatabaseHandler,
     PhoneNumberProcessor,
@@ -42,6 +43,7 @@ def main():
         "db_handler": DatabaseHandler(CHAT_DATABASE_PATH),
         "phone_processor": PhoneNumberProcessor(),
         "sender": MessageSender(SEND_MESSAGE_SCPT),
+        "SPAM_NUMBERS_FILE": SPAM_NUMBERS_FILE,
     }
 
     # Register commands
