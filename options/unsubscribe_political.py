@@ -4,6 +4,8 @@ import time
 import re
 import ftfy
 
+buzz_words = ["Democrats", "congressman", "campaign", "DSCC", "DemsTurnout"]
+
 
 def decode_nsattributedstring(blob_data):
     """Sanitize text."""
@@ -66,7 +68,7 @@ def register_command(subparsers):
 def execute_command(args, shared_objects):
     opted_out_manager = shared_objects["opted_out_manager"]
     db_handler = shared_objects["db_handler"]
-    phone_processor = shared_objects["phone_processor"]
+    shared_objects["phone_processor"]
     sender = shared_objects["sender"]
 
     def unsubscribe_political_messages():
@@ -74,8 +76,6 @@ def execute_command(args, shared_objects):
           'Text STOP to quit' and political buzz words."""
 
         messages = db_handler.get_last_messages_with_phone_numbers(limit=100)
-
-        buzz_words = ["Democrats", "congressman", "campaign", "DSCC"]
         for message_text, message_body, phone_number in messages:
             text = message_body or message_text
             if not text or not phone_number:
@@ -88,8 +88,6 @@ def execute_command(args, shared_objects):
             if not text or not text.strip():
                 continue
 
-            phone_number = phone_processor.clean_phone_number(phone_number)
-            print(f"clean number: {phone_number}")
             if any(buzz_word.lower() in text.lower() for buzz_word in buzz_words):
                 if not opted_out_manager.is_number_opted_out(phone_number):
                     print(

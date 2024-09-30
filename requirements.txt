@@ -1,5 +1,5 @@
 black==24.8.0
-
+ftfy==6.2.3
 mypy-extensions==1.0.0
 pre-commit==3.8.0
 regex==2024.9.11
